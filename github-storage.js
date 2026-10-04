@@ -108,12 +108,13 @@ export async function loadFromGitHub(config) {
 /**
  * Fusión inteligente de dos listas para evitar pérdida de datos si ambos modifican a la vez
  */
-export function mergeLists(localItems, remoteItems) {
+export function mergeLists(localItems, remoteItems, deletedIds = []) {
+  const deletedSet = new Set(deletedIds || []);
   const map = new Map();
 
-  // Meter remotos primero
+  // Meter remotos primero (ignorando los eliminados localmente)
   for (const item of (remoteItems || [])) {
-    if (item && item.id) {
+    if (item && item.id && !deletedSet.has(item.id)) {
       map.set(item.id, item);
     }
   }
@@ -121,6 +122,8 @@ export function mergeLists(localItems, remoteItems) {
   // Comparar con locales
   for (const localItem of (localItems || [])) {
     if (!localItem || !localItem.id) continue;
+    if (deletedSet.has(localItem.id)) continue;
+
     if (!map.has(localItem.id)) {
       // Elemento nuevo añadido en local
       map.set(localItem.id, localItem);
@@ -140,11 +143,27 @@ export function mergeLists(localItems, remoteItems) {
 }
 
 /**
- * Guarda y actualiza la lista de la compra en el repositorio de GitHub con control de conflictos
+ * Guarda y actualiza la lista de la compra en el repositorio de GitHub con control de conflictos y auto-recuperación de SHA
  */
-export async function saveToGitHub(config, items, currentSha, retryCount = 0) {
+export async function saveToGitHub(config, items, currentSha, deletedIds = [], retryCount = 0) {
   const { owner, repo, token, pin } = config;
   const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${FILE_PATH}`;
+
+  let shaToUse = currentSha;
+
+  // Si no tenemos el SHA localmente, consultamos GitHub para no fallar con HTTP 422
+  if (!shaToUse) {
+    try {
+      const existing = await loadFromGitHub(config);
+      if (existing.exists && existing.sha) {
+        shaToUse = existing.sha;
+        // Fusionar para asegurar que no sobreescribimos productos que ya estuviesen en GitHub
+        items = mergeLists(items, existing.items, deletedIds);
+      }
+    } catch (e) {
+      console.warn('No se pudo verificar SHA previo, intentando guardar directamente:', e);
+    }
+  }
 
   // 1. Cifrar la lista si hay PIN
   const payloadToStore = await encryptData(items, pin);
@@ -156,8 +175,8 @@ export async function saveToGitHub(config, items, currentSha, retryCount = 0) {
     content: base64Content
   };
 
-  if (currentSha) {
-    bodyData.sha = currentSha;
+  if (shaToUse) {
+    bodyData.sha = shaToUse;
   }
 
   const res = await fetch(url, {
@@ -170,15 +189,12 @@ export async function saveToGitHub(config, items, currentSha, retryCount = 0) {
     body: JSON.stringify(bodyData)
   });
 
-  // Si hay conflicto de concurrencia (409 Conflict): la otra persona guardó algo hace unos instantes
-  if (res.status === 409 && retryCount < 3) {
-    console.warn('Conflicto detectado en GitHub. Fusionando cambios automáticamente...');
-    // Cargar la versión remota más reciente
+  // Si hay conflicto (409) o falta/desajuste de SHA (422), reintentar automáticamente obteniendo el SHA fresco
+  if ((res.status === 409 || res.status === 422) && retryCount < 3) {
+    console.warn(`Conflicto o SHA desactualizado (HTTP ${res.status}). Obteniendo versión remota y fusionando...`);
     const remoteData = await loadFromGitHub(config);
-    // Fusionar de forma inteligente
-    const mergedItems = mergeLists(items, remoteData.items);
-    // Reintentar guardando con el nuevo SHA
-    return await saveToGitHub(config, mergedItems, remoteData.sha, retryCount + 1);
+    const mergedItems = mergeLists(items, remoteData.items, deletedIds);
+    return await saveToGitHub(config, mergedItems, remoteData.sha, deletedIds, retryCount + 1);
   }
 
   if (!res.ok) {

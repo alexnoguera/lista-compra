@@ -1,12 +1,13 @@
 // app.js - Lógica principal de la aplicación Lista de la Compra
 
 import { CATEGORIES, QUICK_SUGGESTIONS, detectCategory } from './categories.js';
-import { loadFromGitHub, saveToGitHub, testGitHubConnection } from './github-storage.js';
+import { loadFromGitHub, saveToGitHub, testGitHubConnection, mergeLists } from './github-storage.js';
 
 // Claves de almacenamiento local
 const STORAGE_ITEMS_KEY = 'lista_compra_items_v1';
 const STORAGE_SETTINGS_KEY = 'lista_compra_settings_v1';
 const STORAGE_SHA_KEY = 'lista_compra_sha_v1';
+const STORAGE_DELETED_KEY = 'lista_compra_deleted_ids_v1';
 
 // Estado global de la aplicación
 const state = {
@@ -23,6 +24,8 @@ const state = {
   },
   currentSha: null,
   isSyncing: false,
+  hasPendingChanges: false,
+  deletedIds: [],
   syncTimer: null,
   isCompletedCollapsed: false
 };
@@ -57,6 +60,11 @@ function loadLocalData() {
     }
 
     state.currentSha = localStorage.getItem(STORAGE_SHA_KEY) || null;
+
+    const rawDeleted = localStorage.getItem(STORAGE_DELETED_KEY);
+    if (rawDeleted) {
+      state.deletedIds = JSON.parse(rawDeleted);
+    }
   } catch (e) {
     console.error('Error al cargar datos locales:', e);
   }
@@ -70,6 +78,14 @@ function saveLocalData() {
     }
   } catch (e) {
     console.error('Error al guardar datos locales:', e);
+  }
+}
+
+function saveLocalDeletedIds() {
+  try {
+    localStorage.setItem(STORAGE_DELETED_KEY, JSON.stringify(state.deletedIds || []));
+  } catch (e) {
+    console.error('Error al guardar IDs eliminados:', e);
   }
 }
 
@@ -160,35 +176,45 @@ async function syncWithGitHub(forcePush = false) {
     return;
   }
 
-  if (state.isSyncing) return;
+  if (state.isSyncing) {
+    if (forcePush) state.hasPendingChanges = true;
+    return;
+  }
+
   state.isSyncing = true;
   setSyncState('syncing', 'Sincronizando...');
 
   try {
-    if (forcePush) {
-      // Guardar lista local en GitHub
-      const result = await saveToGitHub(state.settings, state.items, state.currentSha);
+    if (forcePush || state.hasPendingChanges) {
+      // 1. Guardar cambios locales en GitHub
+      const result = await saveToGitHub(state.settings, state.items, state.currentSha, state.deletedIds);
       if (result.ok) {
         state.currentSha = result.sha;
+        state.items = result.items;
+        state.hasPendingChanges = false;
         saveLocalData();
+        renderItems();
         setSyncState('synced', 'Sincronizado');
       }
     } else {
-      // Descargar cambios más recientes de GitHub
+      // 2. Comprobación periódica / Descarga de cambios remotos
       const remote = await loadFromGitHub(state.settings);
 
       if (remote.exists) {
         state.currentSha = remote.sha;
-        // Si hay cambios en los elementos remotos, actualizar
-        if (JSON.stringify(remote.items) !== JSON.stringify(state.items)) {
-          state.items = remote.items;
+
+        // Fusión inteligente: nunca sobreescribir ni perder productos que el usuario haya añadido
+        const merged = mergeLists(state.items, remote.items, state.deletedIds);
+
+        if (JSON.stringify(merged) !== JSON.stringify(state.items)) {
+          state.items = merged;
           saveLocalData();
           renderItems();
         }
         setSyncState('synced', 'Sincronizado');
       } else {
         // El archivo aún no existe en GitHub, lo creamos con los datos locales
-        const result = await saveToGitHub(state.settings, state.items, null);
+        const result = await saveToGitHub(state.settings, state.items, null, state.deletedIds);
         state.currentSha = result.sha;
         saveLocalData();
         setSyncState('synced', 'Sincronizado');
@@ -204,6 +230,10 @@ async function syncWithGitHub(forcePush = false) {
     }
   } finally {
     state.isSyncing = false;
+    // Si entraron cambios mientras se completaba la llamada de red, volver a sincronizar
+    if (state.hasPendingChanges) {
+      setTimeout(() => syncWithGitHub(true), 500);
+    }
   }
 }
 
@@ -393,6 +423,11 @@ function quickAddItem(name, category, quantity = '1') {
   };
 
   state.items.unshift(newItem);
+  if (state.deletedIds) {
+    state.deletedIds = state.deletedIds.filter(id => id !== newItem.id);
+    saveLocalDeletedIds();
+  }
+  state.hasPendingChanges = true;
   saveLocalData();
   renderItems();
   triggerVibration(25);
@@ -433,6 +468,7 @@ function toggleItem(id) {
 
   item.completed = !item.completed;
   item.updatedAt = new Date().toISOString();
+  state.hasPendingChanges = true;
 
   saveLocalData();
   renderItems();
@@ -445,7 +481,13 @@ function toggleItem(id) {
 }
 
 function deleteItem(id) {
+  if (!state.deletedIds) state.deletedIds = [];
+  state.deletedIds.push(id);
+  if (state.deletedIds.length > 50) state.deletedIds = state.deletedIds.slice(-50);
+  saveLocalDeletedIds();
+
   state.items = state.items.filter(i => i.id !== id);
+  state.hasPendingChanges = true;
   saveLocalData();
   renderItems();
   triggerVibration(20);
@@ -454,7 +496,14 @@ function deleteItem(id) {
 
 function clearCompletedItems() {
   if (!confirm('¿Quieres eliminar todos los productos comprados de la lista?')) return;
+  const completedIds = state.items.filter(i => i.completed).map(i => i.id);
+  if (!state.deletedIds) state.deletedIds = [];
+  state.deletedIds.push(...completedIds);
+  if (state.deletedIds.length > 50) state.deletedIds = state.deletedIds.slice(-50);
+  saveLocalDeletedIds();
+
   state.items = state.items.filter(i => !i.completed);
+  state.hasPendingChanges = true;
   saveLocalData();
   renderItems();
   showToast('Comprados eliminados');
