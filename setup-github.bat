@@ -27,9 +27,13 @@ git remote remove origin 2>nul
 git remote add origin https://github.com/%GITHUB_USER%/%REPO_NAME%.git
 
 echo.
-echo 4. Subiendo a GitHub...
+echo 4. Sincronizando cambios remotos de la web...
+git pull --rebase origin main
+
+echo.
+echo 5. Subiendo a GitHub...
 echo (Si te pide credenciales, introduce tu usuario y token o inicia sesión en el navegador)
-git push -u origin main
+git push origin main
 
 echo.
 echo ========================================================
