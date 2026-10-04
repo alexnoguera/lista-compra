@@ -60,6 +60,15 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+html, body {
+  width: 100%;
+  overflow-x: hidden;
+}
+
+.hidden {
+  display: none !important;
+}
+
 body {
   font-family: var(--font-family);
   background-color: var(--bg-app);
@@ -80,6 +89,7 @@ body {
   background-color: var(--bg-app);
   position: relative;
   box-shadow: var(--shadow-lg);
+  overflow-x: hidden;
 }
 
 /* ================= ENCABEZADO ================= */
@@ -99,32 +109,35 @@ body {
 .header-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  min-width: 0;
 }
 
 .logo {
-  font-size: 1.25rem;
+  font-size: 1.15rem;
   font-weight: 700;
   display: flex;
   align-items: center;
   gap: 6px;
   color: var(--text-main);
+  white-space: nowrap;
 }
 
 .logo-icon {
-  font-size: 1.4rem;
+  font-size: 1.3rem;
 }
 
 .sync-status {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 600;
   padding: 3px 8px;
   border-radius: var(--radius-full);
   background: var(--bg-input);
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .status-dot {
@@ -151,6 +164,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .icon-button {
@@ -218,20 +232,35 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
+  flex: 1;
 }
 
 .banner-emoji {
-  font-size: 1.6rem;
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.banner-text {
+  min-width: 0;
 }
 
 .banner-text strong {
   display: block;
-  font-size: 0.9rem;
+  font-size: 0.88rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .banner-text p {
-  font-size: 0.78rem;
-  opacity: 0.92;
+  font-size: 0.75rem;
+  opacity: 0.95;
+  line-height: 1.25;
+}
+
+.info-banner .btn {
+  flex-shrink: 0;
 }
 
 /* ================= FORMULARIO AÑADIR ================= */
@@ -253,24 +282,28 @@ body {
 .input-row {
   display: flex;
   gap: 8px;
+  width: 100%;
+  min-width: 0;
 }
 
 .input-wrapper {
   position: relative;
   flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
 }
 
 .input-wrapper input {
   width: 100%;
+  min-width: 0;
   height: 48px;
-  padding: 0 85px 0 14px;
+  padding: 0 82px 0 14px;
   border-radius: var(--radius-md);
   border: 1.5px solid var(--border-color);
   background: var(--bg-input);
   color: var(--text-main);
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-family: inherit;
   outline: none;
   transition: border-color 0.15s ease;
@@ -1049,7 +1082,32 @@ body {
   transform: translate(-50%, 15px);
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
+/* ================= MEDIA QUERIES PANTALLAS PEQUEÑAS ================= */
+@media (max-width: 400px) {
+  .app-header {
+    padding: 10px 12px;
+  }
+  .logo-text {
+    font-size: 1.05rem;
+  }
+  .sync-status {
+    padding: 2px 6px;
+    font-size: 0.68rem;
+  }
+  .info-banner {
+    margin: 8px 12px 2px 12px;
+    padding: 10px 12px;
+  }
+  .add-section {
+    padding: 10px 12px 8px 12px;
+  }
+  .suggestions-section {
+    padding: 0 12px 6px 12px;
+  }
+  .categories-bar {
+    padding: 4px 12px 8px 12px;
+  }
+  .list-section {
+    padding: 4px 12px 20px 12px;
+  }
 }

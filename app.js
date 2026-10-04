@@ -34,11 +34,21 @@ function generateId() {
 
 // ================= GESTIÓN DEL ALMACENAMIENTO LOCAL =================
 
+const INITIAL_ITEMS = [
+  { id: 'init_1', name: 'Leche', quantity: '2', category: 'lacteos_huevos', completed: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'init_2', name: 'Huevos', quantity: '1 docena', category: 'lacteos_huevos', completed: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'init_3', name: 'Plátanos', quantity: '1 kg', category: 'frutas_verduras', completed: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'init_4', name: 'Pan', quantity: '1 barra', category: 'panaderia_cereales', completed: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+];
+
 function loadLocalData() {
   try {
     const rawItems = localStorage.getItem(STORAGE_ITEMS_KEY);
     if (rawItems) {
       state.items = JSON.parse(rawItems);
+    } else {
+      state.items = INITIAL_ITEMS;
+      saveLocalData();
     }
 
     const rawSettings = localStorage.getItem(STORAGE_SETTINGS_KEY);
