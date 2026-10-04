@@ -1,5 +1,5 @@
 // sw.js - Service Worker con estrategia Network-First para asegurar siempre la versión más reciente
-const CACHE_NAME = 'lista-compra-v4';
+const CACHE_NAME = 'lista-compra-v5';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

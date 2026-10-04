@@ -25,6 +25,8 @@ const state = {
   currentSha: null,
   isSyncing: false,
   hasPendingChanges: false,
+  lastLocalChangeTime: 0,
+  syncDebounceTimer: null,
   deletedIds: [],
   syncTimer: null,
   isCompletedCollapsed: false
@@ -202,6 +204,21 @@ function setSyncState(status, text, tooltip = '') {
   }
 }
 
+function scheduleSync(delay = 600) {
+  state.lastLocalChangeTime = Date.now();
+  state.hasPendingChanges = true;
+  saveLocalData();
+
+  if (state.syncDebounceTimer) {
+    clearTimeout(state.syncDebounceTimer);
+  }
+
+  state.syncDebounceTimer = setTimeout(() => {
+    state.syncDebounceTimer = null;
+    syncWithGitHub(true);
+  }, delay);
+}
+
 async function syncWithGitHub(forcePush = false) {
   if (!state.settings.owner || !state.settings.token) {
     setSyncState('local', 'Modo Local');
@@ -215,15 +232,33 @@ async function syncWithGitHub(forcePush = false) {
 
   state.isSyncing = true;
   setSyncState('syncing', 'Sincronizando...');
+  const syncStartTime = Date.now();
 
   try {
     if (forcePush || state.hasPendingChanges) {
       // 1. Guardar cambios locales en GitHub
-      const result = await saveToGitHub(state.settings, state.items, state.currentSha, state.deletedIds);
+      const itemsToSave = [...state.items];
+      const result = await saveToGitHub(state.settings, itemsToSave, state.currentSha, state.deletedIds);
       if (result.ok) {
         state.currentSha = result.sha;
-        state.items = result.items;
-        state.hasPendingChanges = false;
+
+        // Si el usuario modificó la lista localmente mientras se realizaba la llamada de red:
+        if (state.lastLocalChangeTime > syncStartTime) {
+          // Fusionar preservando los ítems añadidos localmente durante la llamada
+          const localIds = new Set(state.items.map(i => i.id));
+          const merged = [...state.items];
+          for (const resItem of result.items) {
+            if (!localIds.has(resItem.id) && !state.deletedIds.includes(resItem.id)) {
+              merged.push(resItem);
+            }
+          }
+          state.items = merged;
+          state.hasPendingChanges = true;
+        } else {
+          state.items = result.items;
+          state.hasPendingChanges = false;
+        }
+
         saveLocalData();
         renderItems();
         setSyncState('synced', 'Sincronizado');
@@ -287,7 +322,7 @@ async function syncWithGitHub(forcePush = false) {
     state.isSyncing = false;
     // Si entraron cambios mientras se completaba la llamada de red, volver a sincronizar
     if (state.hasPendingChanges) {
-      setTimeout(() => syncWithGitHub(true), 500);
+      setTimeout(() => syncWithGitHub(true), 300);
     }
   }
 }
@@ -325,9 +360,18 @@ function renderQuickChips() {
   });
 }
 
+function setCategoryFilter(catId) {
+  state.currentFilter = catId;
+  document.querySelectorAll('.filter-pill').forEach(b => {
+    b.classList.toggle('active', b.dataset.category === catId);
+  });
+  renderItems();
+}
+
 function renderItems() {
   const container = document.getElementById('itemsContainer');
   const emptyState = document.getElementById('emptyState');
+  const filterNotice = document.getElementById('filterNotice');
   const completedSection = document.getElementById('completedSection');
   const completedContainer = document.getElementById('completedContainer');
   const completedCountEl = document.getElementById('completedCount');
@@ -344,15 +388,80 @@ function renderItems() {
   // Contador total pendientes
   if (countAllEl) countAllEl.textContent = activeItems.length;
 
+  // Contar productos activos por categoría
+  const categoryCounts = {};
+  activeItems.forEach(i => {
+    const cat = i.category || 'otros';
+    categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+  });
+
+  // Actualizar badges en todos los botones de filtro
+  document.querySelectorAll('.filter-pill').forEach(btn => {
+    const cat = btn.dataset.category;
+    let badge = btn.querySelector('.filter-count');
+    if (cat === 'all') {
+      if (badge) badge.textContent = activeItems.length;
+      return;
+    }
+    const count = categoryCounts[cat] || 0;
+    if (count > 0) {
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'filter-count';
+        btn.appendChild(badge);
+      }
+      badge.textContent = count;
+      badge.style.display = 'inline-block';
+    } else if (badge) {
+      badge.style.display = 'none';
+    }
+  });
+
   // Filtrar según categoría seleccionada
   let visibleActive = activeItems;
   if (state.currentFilter !== 'all') {
     visibleActive = activeItems.filter(i => i.category === state.currentFilter);
   }
 
-  // Estado vacío
-  if (visibleActive.length === 0 && completedItems.length === 0) {
-    emptyState.classList.remove('hidden');
+  // Banner indicador de filtro activo
+  if (filterNotice) {
+    if (state.currentFilter !== 'all') {
+      const currentCatData = CATEGORIES[state.currentFilter] || CATEGORIES.otros;
+      filterNotice.classList.remove('hidden');
+      const nameEl = document.getElementById('filterNoticeName');
+      const countEl = document.getElementById('filterNoticeCount');
+      const totalEl = document.getElementById('filterNoticeTotal');
+      if (nameEl) nameEl.textContent = `${currentCatData.emoji} ${currentCatData.name}`;
+      if (countEl) countEl.textContent = visibleActive.length;
+      if (totalEl) totalEl.textContent = activeItems.length;
+    } else {
+      filterNotice.classList.add('hidden');
+    }
+  }
+
+  // Estado vacío inteligente (distingue entre lista vacía y filtro sin coincidencias)
+  if (visibleActive.length === 0) {
+    if (activeItems.length > 0 && state.currentFilter !== 'all') {
+      emptyState.classList.remove('hidden');
+      const emptyTitle = emptyState.querySelector('h3');
+      const emptyDesc = emptyState.querySelector('p');
+      const currentCatData = CATEGORIES[state.currentFilter] || CATEGORIES.otros;
+      if (emptyTitle) emptyTitle.textContent = `No hay productos en ${currentCatData.name}`;
+      if (emptyDesc) {
+        emptyDesc.innerHTML = `Tienes <strong>${activeItems.length}</strong> producto(s) en otras categorías.<br><button type="button" class="btn-primary" style="margin-top: 12px; padding: 7px 16px; font-size: 0.85rem;" id="btnResetFilterEmpty">Ver todos los productos</button>`;
+        document.getElementById('btnResetFilterEmpty')?.addEventListener('click', () => {
+          setCategoryFilter('all');
+        });
+      }
+    } else if (completedItems.length === 0) {
+      emptyState.classList.remove('hidden');
+      const emptyTitle = emptyState.querySelector('h3');
+      const emptyDesc = emptyState.querySelector('p');
+      if (emptyTitle) emptyTitle.textContent = 'La lista está vacía';
+      if (emptyDesc) emptyDesc.textContent = 'Añade los productos que necesites o toca en las sugerencias de arriba.';
+    } else {
+      emptyState.classList.add('hidden');
+    }
   } else {
     emptyState.classList.add('hidden');
   }
@@ -467,11 +576,12 @@ function quickAddItem(name, category, quantity = '1') {
     return;
   }
 
+  const cat = category || detectCategory(name);
   const newItem = {
     id: generateId(),
     name: name.trim(),
     quantity: quantity.trim(),
-    category: category || detectCategory(name),
+    category: cat,
     completed: false,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
@@ -482,14 +592,19 @@ function quickAddItem(name, category, quantity = '1') {
     state.deletedIds = state.deletedIds.filter(id => id !== newItem.id);
     saveLocalDeletedIds();
   }
-  state.hasPendingChanges = true;
-  saveLocalData();
-  renderItems();
+
+  // Si el usuario tenía un filtro que ocultaría el nuevo ítem, restablecer a 'all' para que lo vea de inmediato
+  if (state.currentFilter !== 'all' && state.currentFilter !== cat) {
+    setCategoryFilter('all');
+  } else {
+    renderItems();
+  }
+
   triggerVibration(25);
   showToast(`Añadido: ${newItem.name}`);
 
-  // Sincronizar en segundo plano
-  syncWithGitHub(true);
+  // Sincronizar con debounce para agrupar adiciones rápidas sin colisiones
+  scheduleSync(600);
 }
 
 function addItemFromForm(e) {
@@ -523,7 +638,6 @@ function toggleItem(id) {
 
   item.completed = !item.completed;
   item.updatedAt = new Date().toISOString();
-  state.hasPendingChanges = true;
 
   saveLocalData();
   renderItems();
@@ -532,7 +646,7 @@ function toggleItem(id) {
     triggerVibration(45);
   }
 
-  syncWithGitHub(true);
+  scheduleSync(500);
 }
 
 function deleteItem(id) {
@@ -542,11 +656,10 @@ function deleteItem(id) {
   saveLocalDeletedIds();
 
   state.items = state.items.filter(i => i.id !== id);
-  state.hasPendingChanges = true;
   saveLocalData();
   renderItems();
   triggerVibration(20);
-  syncWithGitHub(true);
+  scheduleSync(500);
 }
 
 function clearCompletedItems() {
@@ -558,11 +671,10 @@ function clearCompletedItems() {
   saveLocalDeletedIds();
 
   state.items = state.items.filter(i => !i.completed);
-  state.hasPendingChanges = true;
   saveLocalData();
   renderItems();
   showToast('Comprados eliminados');
-  syncWithGitHub(true);
+  scheduleSync(500);
 }
 
 function updateCategoryPreview(text) {
@@ -722,11 +834,13 @@ function setupEventListeners() {
   // Filtros de categoría
   document.querySelectorAll('.filter-pill').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.filter-pill').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      state.currentFilter = btn.dataset.category;
-      renderItems();
+      setCategoryFilter(btn.dataset.category);
     });
+  });
+
+  // Limpiar filtro desde el banner informativo
+  document.getElementById('btnClearFilter')?.addEventListener('click', () => {
+    setCategoryFilter('all');
   });
 
   // Desplegable de Comprados

@@ -140,6 +140,12 @@
 
     <!-- Lista de Productos Pendientes -->
     <main class="list-section">
+      <!-- Banner indicador cuando hay un filtro activo -->
+      <div id="filterNotice" class="filter-notice hidden">
+        <span class="filter-notice-text">Mostrando <strong id="filterNoticeName">...</strong> (<span id="filterNoticeCount">0</span> de <span id="filterNoticeTotal">0</span>)</span>
+        <button id="btnClearFilter" type="button" class="btn-clear-filter">Ver todos</button>
+      </div>
+
       <div id="emptyState" class="empty-state">
         <div class="empty-icon">🧺</div>
         <h3>La lista está vacía</h3>

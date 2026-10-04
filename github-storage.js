@@ -67,12 +67,15 @@ export async function testGitHubConnection(config) {
  */
 export async function loadFromGitHub(config) {
   const { owner, repo, token, pin } = config;
-  const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${FILE_PATH}`;
+  const cacheBuster = Date.now();
+  const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${FILE_PATH}?ref=main&_cb=${cacheBuster}`;
 
   const res = await fetch(url, {
     headers: {
       'Authorization': `Bearer ${token.trim()}`,
-      'Accept': 'application/vnd.github.v3+json'
+      'Accept': 'application/vnd.github.v3+json',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache'
     },
     cache: 'no-store'
   });
@@ -189,7 +192,8 @@ export async function saveToGitHub(config, items, currentSha, deletedIds = [], r
 
   const bodyData = {
     message: 'Actualizar lista de la compra [sync]',
-    content: base64Content
+    content: base64Content,
+    branch: 'main'
   };
 
   if (shaToUse) {
@@ -208,7 +212,8 @@ export async function saveToGitHub(config, items, currentSha, deletedIds = [], r
 
   // Si hay conflicto (409) o falta/desajuste de SHA (422), reintentar automáticamente obteniendo el SHA fresco
   if ((res.status === 409 || res.status === 422) && retryCount < 3) {
-    console.warn(`Conflicto o SHA desactualizado (HTTP ${res.status}). Obteniendo versión remota y fusionando...`);
+    console.warn(`Conflicto o SHA desactualizado (HTTP ${res.status}). Obteniendo versión remota fresca y fusionando...`);
+    await new Promise(r => setTimeout(r, 250 * (retryCount + 1)));
     const remoteData = await loadFromGitHub(config);
     const combinedDeleted = Array.from(new Set([...deletedIds, ...(remoteData.deletedIds || [])])).slice(-100);
     const mergedItems = mergeLists(items, remoteData.items, combinedDeleted);
