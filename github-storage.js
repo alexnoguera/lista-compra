@@ -95,10 +95,21 @@ export async function loadFromGitHub(config) {
   const parsedJson = JSON.parse(rawText);
 
   // Descifrar si tiene cifrado
-  const items = await decryptData(parsedJson, pin);
+  const decrypted = await decryptData(parsedJson, pin);
+
+  let items = [];
+  let deletedIds = [];
+
+  if (Array.isArray(decrypted)) {
+    items = decrypted;
+  } else if (decrypted && typeof decrypted === 'object') {
+    items = decrypted.items || [];
+    deletedIds = decrypted.deletedIds || [];
+  }
 
   return {
-    items: Array.isArray(items) ? items : (items?.items || []),
+    items,
+    deletedIds,
     sha: fileData.sha,
     exists: true,
     lastUpdated: fileData.commit ? new Date().toISOString() : null
@@ -139,7 +150,7 @@ export function mergeLists(localItems, remoteItems, deletedIds = []) {
     }
   }
 
-  return Array.from(map.values());
+  return Array.from(map.values()).filter(item => !deletedSet.has(item.id));
 }
 
 /**
@@ -157,16 +168,22 @@ export async function saveToGitHub(config, items, currentSha, deletedIds = [], r
       const existing = await loadFromGitHub(config);
       if (existing.exists && existing.sha) {
         shaToUse = existing.sha;
-        // Fusionar para asegurar que no sobreescribimos productos que ya estuviesen en GitHub
-        items = mergeLists(items, existing.items, deletedIds);
+        const combinedDeleted = Array.from(new Set([...deletedIds, ...(existing.deletedIds || [])])).slice(-100);
+        items = mergeLists(items, existing.items, combinedDeleted);
+        deletedIds = combinedDeleted;
       }
     } catch (e) {
       console.warn('No se pudo verificar SHA previo, intentando guardar directamente:', e);
     }
   }
 
-  // 1. Cifrar la lista si hay PIN
-  const payloadToStore = await encryptData(items, pin);
+  // 1. Cifrar la lista y los IDs eliminados
+  const dataToStore = {
+    items: items,
+    deletedIds: (deletedIds || []).slice(-100)
+  };
+
+  const payloadToStore = await encryptData(dataToStore, pin);
   const jsonContent = JSON.stringify(payloadToStore, null, 2);
   const base64Content = utf8ToBase64(jsonContent);
 
@@ -193,8 +210,9 @@ export async function saveToGitHub(config, items, currentSha, deletedIds = [], r
   if ((res.status === 409 || res.status === 422) && retryCount < 3) {
     console.warn(`Conflicto o SHA desactualizado (HTTP ${res.status}). Obteniendo versión remota y fusionando...`);
     const remoteData = await loadFromGitHub(config);
-    const mergedItems = mergeLists(items, remoteData.items, deletedIds);
-    return await saveToGitHub(config, mergedItems, remoteData.sha, deletedIds, retryCount + 1);
+    const combinedDeleted = Array.from(new Set([...deletedIds, ...(remoteData.deletedIds || [])])).slice(-100);
+    const mergedItems = mergeLists(items, remoteData.items, combinedDeleted);
+    return await saveToGitHub(config, mergedItems, remoteData.sha, combinedDeleted, retryCount + 1);
   }
 
   if (!res.ok) {
@@ -206,6 +224,7 @@ export async function saveToGitHub(config, items, currentSha, deletedIds = [], r
   return {
     ok: true,
     sha: result.content.sha,
-    items: items
+    items: items,
+    deletedIds: deletedIds
   };
 }

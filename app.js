@@ -46,14 +46,6 @@ const INITIAL_ITEMS = [
 
 function loadLocalData() {
   try {
-    const rawItems = localStorage.getItem(STORAGE_ITEMS_KEY);
-    if (rawItems) {
-      state.items = JSON.parse(rawItems);
-    } else {
-      state.items = INITIAL_ITEMS;
-      saveLocalData();
-    }
-
     const rawSettings = localStorage.getItem(STORAGE_SETTINGS_KEY);
     if (rawSettings) {
       state.settings = { ...state.settings, ...JSON.parse(rawSettings) };
@@ -64,6 +56,15 @@ function loadLocalData() {
     const rawDeleted = localStorage.getItem(STORAGE_DELETED_KEY);
     if (rawDeleted) {
       state.deletedIds = JSON.parse(rawDeleted);
+    }
+
+    const rawItems = localStorage.getItem(STORAGE_ITEMS_KEY);
+    if (rawItems) {
+      state.items = JSON.parse(rawItems);
+    } else {
+      // Solo precargar elementos de ejemplo si el usuario no tiene GitHub conectado
+      state.items = state.settings.token ? [] : INITIAL_ITEMS;
+      saveLocalData();
     }
   } catch (e) {
     console.error('Error al cargar datos locales:', e);
@@ -120,6 +121,13 @@ function checkMagicLink() {
         state.settings.repo = repo;
         state.settings.token = token;
         state.settings.pin = pin;
+
+        // Si la lista local solo contenía los INITIAL_ITEMS genéricos (o estaba vacía), resetearla para tomar 100% la remota
+        const isDefaultList = state.items.length <= 4 && state.items.every(i => i.id?.startsWith('init_'));
+        if (isDefaultList) {
+          state.items = [];
+          saveLocalData();
+        }
 
         saveLocalSettings();
         showToast('🎉 ¡Conectando con la lista compartida...!');
@@ -227,11 +235,21 @@ async function syncWithGitHub(forcePush = false) {
       if (remote.exists) {
         state.currentSha = remote.sha;
 
-        // Fusión inteligente: nunca sobreescribir ni perder productos que el usuario haya añadido
+        // Combinar IDs eliminados de remoto y local
+        if (Array.isArray(remote.deletedIds) && remote.deletedIds.length > 0) {
+          const combined = new Set([...state.deletedIds, ...remote.deletedIds]);
+          state.deletedIds = Array.from(combined).slice(-100);
+          saveLocalDeletedIds();
+        }
+
+        // Fusión inteligente: nunca sobreescribir productos ni resucitar eliminados
         const merged = mergeLists(state.items, remote.items, state.deletedIds);
 
-        if (JSON.stringify(merged) !== JSON.stringify(state.items)) {
-          state.items = merged;
+        // Asegurar que ningún producto eliminado permanezca en la lista local
+        const filtered = merged.filter(item => !state.deletedIds.includes(item.id));
+
+        if (JSON.stringify(filtered) !== JSON.stringify(state.items)) {
+          state.items = filtered;
           saveLocalData();
           renderItems();
         }
