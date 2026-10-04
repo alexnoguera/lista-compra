@@ -94,13 +94,16 @@ function checkMagicLink() {
       const decodedJson = atob(setupB64);
       const parsedConfig = JSON.parse(decodedJson);
 
-      if (parsedConfig.owner && parsedConfig.repo && parsedConfig.token) {
-        state.settings.owner = parsedConfig.owner;
-        state.settings.repo = parsedConfig.repo;
-        state.settings.token = parsedConfig.token;
-        if (parsedConfig.pin) {
-          state.settings.pin = parsedConfig.pin;
-        }
+      const owner = parsedConfig.o || parsedConfig.owner;
+      const repo = parsedConfig.r || parsedConfig.repo || 'lista-compra';
+      const token = parsedConfig.t || parsedConfig.token;
+      const pin = parsedConfig.p || parsedConfig.pin || '';
+
+      if (owner && repo && token) {
+        state.settings.owner = owner;
+        state.settings.repo = repo;
+        state.settings.token = token;
+        state.settings.pin = pin;
 
         saveLocalSettings();
         showToast('🎉 ¡Conectado con éxito a la lista compartida!');
@@ -118,12 +121,16 @@ function checkMagicLink() {
 function generateMagicLinkUrl() {
   if (!state.settings.owner || !state.settings.token) return null;
 
+  // Claves compactas para reducir drásticamente el tamaño del código QR
   const payload = {
-    owner: state.settings.owner.trim(),
-    repo: state.settings.repo.trim(),
-    token: state.settings.token.trim(),
-    pin: state.settings.pin ? state.settings.pin.trim() : ''
+    o: state.settings.owner.trim(),
+    r: state.settings.repo.trim(),
+    t: state.settings.token.trim()
   };
+
+  if (state.settings.pin) {
+    payload.p = state.settings.pin.trim();
+  }
 
   const b64 = btoa(JSON.stringify(payload));
   const baseUrl = window.location.origin + window.location.pathname;

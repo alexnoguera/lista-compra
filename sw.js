@@ -9,6 +9,7 @@ const ASSETS_TO_CACHE = [
   './categories.js',
   './crypto.js',
   './github-storage.js',
+  './qrcode.min.js',
   './qrcode.js',
   './manifest.json'
 ];
