@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Nuestra Lista de la Compra 🛒</title>
+  
+  <!-- PWA & Mobile Meta Tags -->
+  <meta name="theme-color" content="#10b981">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Lista Compra">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛒</text></svg>">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛒</text></svg>">
+  
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Encabezado Principal -->
+    <header class="app-header">
+      <div class="header-left">
+        <h1 class="logo">
+          <span class="logo-icon">🛒</span>
+          <span class="logo-text">Nuestra Lista</span>
+        </h1>
+        <div id="syncStatus" class="sync-status status-local" title="Estado de sincronización">
+          <span class="status-dot"></span>
+          <span class="status-text">Modo Local</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="btnSyncNow" class="icon-button" title="Sincronizar ahora" aria-label="Sincronizar">
+          <svg class="icon icon-sync" viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none">
+            <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/>
+          </svg>
+        </button>
+        <button id="btnOpenSettings" class="icon-button" title="Ajustes y Compartir" aria-label="Ajustes">
+          <span id="settingsBadge" class="badge-dot"></span>
+          <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Banner de Bienvenida / Configuración rápida si no está conectado a GitHub -->
+    <div id="unconfiguredBanner" class="info-banner">
+      <div class="banner-content">
+        <span class="banner-emoji">✨</span>
+        <div class="banner-text">
+          <strong>¡Conéctalo con GitHub!</strong>
+          <p>Para sincronizar la lista en tiempo real con tu mujer de forma 100% privada.</p>
+        </div>
+      </div>
+      <button id="btnQuickConfig" class="btn btn-sm btn-primary">Conectar</button>
+    </div>
+
+    <!-- Formulario para Añadir Producto -->
+    <section class="add-section">
+      <form id="addForm" class="add-form" autocomplete="off">
+        <div class="input-row">
+          <div class="input-wrapper">
+            <input 
+              type="text" 
+              id="inputItemName" 
+              placeholder="¿Qué necesitas comprar? (ej. Leche, Manzanas...)" 
+              required
+              autocapitalize="sentences"
+            >
+            <div id="categoryPreview" class="category-preview" title="Categoría detectada">
+              <span id="previewEmoji">🛒</span>
+              <span id="previewName">Otros</span>
+            </div>
+          </div>
+          <button type="submit" class="btn-add" id="btnAddItem" aria-label="Añadir a la lista">
+            <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" stroke-width="2.5" fill="none">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Fila de detalles opcionales (Cantidad y Categoría manual) -->
+        <div class="details-row">
+          <div class="quantity-picker">
+            <span class="qty-label">Cant:</span>
+            <button type="button" class="btn-qty" id="btnQtyMinus">-</button>
+            <input type="text" id="inputQuantity" value="1" class="qty-input">
+            <button type="button" class="btn-qty" id="btnQtyPlus">+</button>
+          </div>
+          <div class="category-select-wrapper">
+            <select id="selectCategory" class="category-select" title="Cambiar categoría">
+              <option value="auto">⚡ Auto-detectar</option>
+              <option value="frutas_verduras">🍎 Frutas y Verduras</option>
+              <option value="lacteos_huevos">🥛 Lácteos y Huevos</option>
+              <option value="carnes_pescados">🥩 Carnes y Pescados</option>
+              <option value="panaderia_cereales">🥖 Panadería</option>
+              <option value="despensa_conservas">🥫 Despensa</option>
+              <option value="bebidas">🥤 Bebidas</option>
+              <option value="limpieza_hogar">🧼 Limpieza</option>
+              <option value="higiene_cuidado">🧴 Higiene</option>
+              <option value="congelados">❄️ Congelados</option>
+              <option value="otros">🛒 Otros</option>
+            </select>
+          </div>
+        </div>
+      </form>
+    </section>
+
+    <!-- Sugerencias Rápidas Frecuentes (Chips) -->
+    <section class="suggestions-section">
+      <div class="suggestions-header">
+        <span class="suggestions-title">Sugerencias habituales</span>
+      </div>
+      <div id="quickChipsContainer" class="quick-chips">
+        <!-- Rellenado dinámicamente -->
+      </div>
+    </section>
+
+    <!-- Filtro de Categorías -->
+    <nav class="categories-bar">
+      <button class="filter-pill active" data-category="all">
+        <span>Todo</span>
+        <span id="countAll" class="filter-count">0</span>
+      </button>
+      <button class="filter-pill" data-category="frutas_verduras">🍎 Fruta/Verdura</button>
+      <button class="filter-pill" data-category="lacteos_huevos">🥛 Lácteos</button>
+      <button class="filter-pill" data-category="carnes_pescados">🥩 Carne/Pescado</button>
+      <button class="filter-pill" data-category="panaderia_cereales">🥖 Panadería</button>
+      <button class="filter-pill" data-category="despensa_conservas">🥫 Despensa</button>
+      <button class="filter-pill" data-category="bebidas">🥤 Bebidas</button>
+      <button class="filter-pill" data-category="limpieza_hogar">🧼 Limpieza</button>
+      <button class="filter-pill" data-category="higiene_cuidado">🧴 Higiene</button>
+      <button class="filter-pill" data-category="congelados">❄️ Congelados</button>
+      <button class="filter-pill" data-category="otros">🛒 Otros</button>
+    </nav>
+
+    <!-- Lista de Productos Pendientes -->
+    <main class="list-section">
+      <div id="emptyState" class="empty-state">
+        <div class="empty-icon">🧺</div>
+        <h3>La lista está vacía</h3>
+        <p>Añade los productos que necesites o toca en las sugerencias de arriba.</p>
+      </div>
+
+      <div id="itemsContainer" class="items-container">
+        <!-- Renderizado dinámicamente con las tarjetas de productos -->
+      </div>
+
+      <!-- Sección de Comprados / Tachados -->
+      <section id="completedSection" class="completed-section hidden">
+        <div class="completed-header" id="btnToggleCompleted">
+          <div class="completed-title">
+            <span class="completed-chevron">▼</span>
+            <span>Comprados (<span id="completedCount">0</span>)</span>
+          </div>
+          <div class="completed-actions">
+            <button id="btnClearCompleted" class="btn-text-danger" title="Eliminar los productos comprados">Limpiar</button>
+          </div>
+        </div>
+        <div id="completedContainer" class="completed-items">
+          <!-- Productos ya comprados -->
+        </div>
+      </section>
+    </main>
+
+    <!-- Barra Inferior / Toast flotante de sincronización -->
+    <div id="toast" class="toast hidden"></div>
+  </div>
+
+  <!-- Modal de Ajustes y Compartir con mi Pareja -->
+  <div id="settingsModal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 class="modal-title">Configuración y Privacidad</h2>
+        <button id="btnCloseModal" class="icon-button" aria-label="Cerrar">&times;</button>
+      </div>
+
+      <!-- Pestañas de Ajustes -->
+      <div class="modal-tabs">
+        <button class="modal-tab active" data-tab="tab-share">💑 Compartir</button>
+        <button class="modal-tab" data-tab="tab-github">🐙 GitHub</button>
+        <button class="modal-tab" data-tab="tab-prefs">⚙️ Preferencias</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Pestaña 1: Compartir con Pareja -->
+        <div id="tab-share" class="tab-pane active">
+          <div class="share-box">
+            <h3>Conectar el móvil de tu mujer</h3>
+            <p class="share-desc">
+              Para que tu mujer tenga exactamente la misma lista en su móvil sin tener que teclear tokens ni configuraciones:
+            </p>
+
+            <div class="qr-container">
+              <div id="qrCodeWrapper" class="qr-code-wrapper">
+                <div class="qr-placeholder">Configura primero tus credenciales de GitHub en la pestaña de al lado para generar el código QR.</div>
+              </div>
+              <p class="qr-hint">Apunta con la cámara del móvil de tu mujer a este código QR para abrir y conectar la lista al instante.</p>
+            </div>
+
+            <div class="share-buttons">
+              <button id="btnCopyMagicLink" class="btn btn-secondary btn-block">
+                📋 Copiar Enlace Mágico
+              </button>
+              <button id="btnShareWhatsApp" class="btn btn-whatsapp btn-block">
+                💬 Enviar enlace por WhatsApp
+              </button>
+            </div>
+
+            <div class="privacy-note">
+              🔒 <strong>Privacidad Total:</strong> Los datos de acceso se transmiten únicamente en el fragmento interno del enlace (después de <code>#</code>). Los servidores web nunca reciben ni registran tu token.
+            </div>
+          </div>
+        </div>
+
+        <!-- Pestaña 2: Conexión GitHub -->
+        <div id="tab-github" class="tab-pane">
+          <form id="githubConfigForm">
+            <div class="form-group">
+              <label for="cfgOwner">Usuario de GitHub:</label>
+              <input type="text" id="cfgOwner" placeholder="alexnoguera" value="alexnoguera" required>
+            </div>
+
+            <div class="form-group">
+              <label for="cfgRepo">Nombre del Repositorio:</label>
+              <input type="text" id="cfgRepo" placeholder="lista-compra" value="lista-compra" required>
+              <small class="form-hint">El repositorio donde se guardará <code>data/shopping_list.json</code>.</small>
+            </div>
+
+            <div class="form-group">
+              <label for="cfgToken">Personal Access Token (PAT):</label>
+              <input type="password" id="cfgToken" placeholder="ghp_..." required autocomplete="off">
+              <small class="form-hint">
+                Genera un token en GitHub con permiso de lectura y escritura (<code>repo</code> o Fine-grained: <code>Contents: Read and write</code>).
+              </small>
+            </div>
+
+            <div class="form-group">
+              <label for="cfgPin">
+                PIN o Contraseña Familiar (Cifrado AES-256):
+              </label>
+              <input type="password" id="cfgPin" placeholder="ej. 1234 (opcional pero recomendado)" autocomplete="off">
+              <small class="form-hint">
+                🛡️ Si introduces un PIN, la lista se cifra con <strong>AES-256</strong> en tu navegador antes de subirse a GitHub. Nadie más podrá leer tus productos.
+              </small>
+            </div>
+
+            <div class="form-buttons">
+              <button type="button" id="btnTestGithub" class="btn btn-secondary">Probar Conexión</button>
+              <button type="submit" class="btn btn-primary">Guardar Configuración</button>
+            </div>
+            <div id="githubTestFeedback" class="test-feedback"></div>
+          </form>
+        </div>
+
+        <!-- Pestaña 3: Preferencias -->
+        <div id="tab-prefs" class="tab-pane">
+          <div class="pref-item">
+            <label for="selectTheme">Tema visual:</label>
+            <select id="selectTheme" class="pref-select">
+              <option value="system">Seguir el sistema (Automático)</option>
+              <option value="light">Claro ☀️</option>
+              <option value="dark">Oscuro 🌙</option>
+            </select>
+          </div>
+
+          <div class="pref-item">
+            <label for="selectSyncInterval">Sincronización automática:</label>
+            <select id="selectSyncInterval" class="pref-select">
+              <option value="15">Cada 15 segundos</option>
+              <option value="30" selected>Cada 30 segundos</option>
+              <option value="60">Cada 1 minuto</option>
+              <option value="manual">Solo manual / Al abrir la app</option>
+            </select>
+          </div>
+
+          <div class="pref-item">
+            <label class="checkbox-label">
+              <input type="checkbox" id="chkHaptics" checked>
+              <span>Vibración háptica al tachar productos</span>
+            </label>
+          </div>
+
+          <hr class="divider">
+
+          <div class="backup-section">
+            <h4>Copia de Seguridad</h4>
+            <div class="backup-buttons">
+              <button id="btnExportJson" class="btn btn-sm btn-secondary">Exportar JSON</button>
+              <label class="btn btn-sm btn-secondary file-upload-btn">
+                Importar JSON
+                <input type="file" id="fileImportJson" accept=".json" style="display: none;">
+              </label>
+            </div>
+          </div>
+
+          <hr class="divider">
+
+          <div class="danger-zone">
+            <button id="btnResetAll" class="btn btn-sm btn-danger">Borrar datos locales y desconectar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="qrcode.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

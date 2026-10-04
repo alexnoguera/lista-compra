@@ -1,0 +1,8 @@
+# Archivos del sistema y temporales
+.DS_Store
+Thumbs.db
+*.log
+
+# Entornos y secretos locales (si existieran)
+.env
+.env.local

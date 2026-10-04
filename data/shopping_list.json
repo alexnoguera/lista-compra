@@ -1,0 +1,29 @@
+[
+  {
+    "id": "item_leche_init",
+    "name": "Leche",
+    "quantity": "2",
+    "category": "lacteos_huevos",
+    "completed": false,
+    "createdAt": "2026-10-04T10:00:00.000Z",
+    "updatedAt": "2026-10-04T10:00:00.000Z"
+  },
+  {
+    "id": "item_huevos_init",
+    "name": "Huevos",
+    "quantity": "1 docena",
+    "category": "lacteos_huevos",
+    "completed": false,
+    "createdAt": "2026-10-04T10:00:00.000Z",
+    "updatedAt": "2026-10-04T10:00:00.000Z"
+  },
+  {
+    "id": "item_pan_init",
+    "name": "Pan",
+    "quantity": "1",
+    "category": "panaderia_cereales",
+    "completed": false,
+    "createdAt": "2026-10-04T10:00:00.000Z",
+    "updatedAt": "2026-10-04T10:00:00.000Z"
+  }
+]
