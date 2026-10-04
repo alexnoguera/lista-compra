@@ -122,10 +122,16 @@ function checkMagicLink() {
         state.settings.pin = pin;
 
         saveLocalSettings();
-        showToast('🎉 ¡Conectado con éxito a la lista compartida!');
+        showToast('🎉 ¡Conectando con la lista compartida...!');
 
         // Limpiar el hash de la barra de direcciones por seguridad
         window.history.replaceState(null, '', window.location.pathname);
+
+        // Sincronizar inmediatamente al recibir el enlace mágico para descargar la lista remota
+        setTimeout(() => {
+          syncWithGitHub(false);
+          startAutoSync();
+        }, 150);
       }
     }
   } catch (e) {
@@ -137,15 +143,19 @@ function checkMagicLink() {
 function generateMagicLinkUrl() {
   if (!state.settings.owner || !state.settings.token) return null;
 
-  // Claves compactas para reducir drásticamente el tamaño del código QR
+  // Claves duales (compactas y completas) para compatibilidad 100% con cualquier versión en caché
   const payload = {
     o: state.settings.owner.trim(),
     r: state.settings.repo.trim(),
-    t: state.settings.token.trim()
+    t: state.settings.token.trim(),
+    owner: state.settings.owner.trim(),
+    repo: state.settings.repo.trim(),
+    token: state.settings.token.trim()
   };
 
   if (state.settings.pin) {
     payload.p = state.settings.pin.trim();
+    payload.pin = state.settings.pin.trim();
   }
 
   const b64 = btoa(JSON.stringify(payload));
