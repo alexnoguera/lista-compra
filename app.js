@@ -149,19 +149,33 @@ function generateMagicLinkUrl() {
   }
 
   const b64 = btoa(JSON.stringify(payload));
-  const baseUrl = window.location.origin + window.location.pathname;
+
+  // Si estamos en un origen HTTP no seguro (ej: dominio personalizado antes de emitirse el SSL), usamos la URL oficial con HTTPS garantizado
+  let baseUrl = window.location.origin + window.location.pathname;
+  if (window.location.protocol === 'http:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    baseUrl = `https://${state.settings.owner}.github.io/${state.settings.repo}/`;
+  }
+
   return `${baseUrl}#setup=${b64}`;
 }
 
 // ================= SINCRONIZACIÓN CON GITHUB =================
 
-function setSyncState(status, text) {
+function setSyncState(status, text, tooltip = '') {
   const el = document.getElementById('syncStatus');
   const syncBtn = document.querySelector('.icon-sync');
   if (!el) return;
 
   el.className = `sync-status status-${status}`;
   el.querySelector('.status-text').textContent = text;
+
+  if (tooltip) {
+    el.title = tooltip;
+    el.dataset.errorDetail = tooltip;
+  } else {
+    el.title = 'Estado de sincronización';
+    delete el.dataset.errorDetail;
+  }
 
   if (status === 'syncing') {
     syncBtn?.classList.add('spinning');
@@ -222,11 +236,24 @@ async function syncWithGitHub(forcePush = false) {
     }
   } catch (err) {
     console.error('Error de sincronización:', err);
-    if (err.message?.includes('INVALID_PIN')) {
-      setSyncState('error', 'PIN incorrecto');
+    if (err.message?.includes('REQUIRE_HTTPS')) {
+      const msg = 'Los navegadores exigen HTTPS para el cifrado. Entra por https://alexnoguera.github.io/lista-compra/';
+      setSyncState('error', 'Falta HTTPS', msg);
+      showToast('⚠️ Se requiere HTTPS. Entra por https://alexnoguera.github.io/lista-compra/');
+    } else if (err.message?.includes('INVALID_PIN')) {
+      setSyncState('error', 'PIN incorrecto', 'El PIN familiar introducido no coincide con los datos cifrados en GitHub.');
       showToast('🔒 El PIN familiar no coincide con los datos cifrados.');
+    } else if (err.message?.includes('401') || err.message?.includes('Bad credentials')) {
+      setSyncState('error', 'Token no válido', 'El token de GitHub no es válido o ha caducado. Revisa tus Ajustes.');
+      showToast('🔑 Token de GitHub no válido. Revisa los Ajustes.');
+    } else if (err.message?.includes('403') || err.message?.includes('Resource not accessible')) {
+      setSyncState('error', 'Sin permiso escribir', 'El token de GitHub no tiene permisos de lectura y escritura (Contents: Read & write).');
+      showToast('⚠️ El token no tiene permiso de escritura en el repositorio.');
+    } else if (err.message?.includes('404')) {
+      setSyncState('error', 'Repo no encontrado', 'No se ha encontrado el repositorio en GitHub. Revisa el nombre en Ajustes.');
+      showToast('⚠️ No se encontró el repositorio en GitHub.');
     } else {
-      setSyncState('error', 'Sin conexión');
+      setSyncState('error', 'Sin conexión', err.message || 'Error de conexión');
     }
   } finally {
     state.isSyncing = false;
@@ -691,6 +718,19 @@ function setupEventListeners() {
     syncWithGitHub(false);
   });
 
+  // Clic en el indicador de estado para ver detalles o diagnóstico
+  document.getElementById('syncStatus')?.addEventListener('click', () => {
+    const el = document.getElementById('syncStatus');
+    if (el.dataset.errorDetail) {
+      alert('Diagnóstico de sincronización:\n\n' + el.dataset.errorDetail);
+    } else if (!state.settings.token) {
+      openModal('tab-github');
+    } else {
+      showToast('Comprobando cambios...');
+      syncWithGitHub(false);
+    }
+  });
+
   // Botones Modal
   document.getElementById('btnOpenSettings')?.addEventListener('click', () => openModal('tab-share'));
   document.getElementById('btnQuickConfig')?.addEventListener('click', () => openModal('tab-github'));
@@ -843,8 +883,15 @@ function init() {
   setupEventListeners();
 
   if (state.settings.owner && state.settings.token) {
-    syncWithGitHub(false);
-    startAutoSync();
+    // Si se accede por HTTP no seguro (ej: dominio nuevo sin SSL), advertir al usuario
+    if (window.location.protocol === 'http:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      const secureUrl = `https://${state.settings.owner}.github.io/${state.settings.repo}/`;
+      setSyncState('error', 'Falta HTTPS', 'Los navegadores bloquean el cifrado en páginas sin HTTPS. Entra por ' + secureUrl);
+      showToast('⚠️ Se requiere HTTPS. Entra por ' + secureUrl);
+    } else {
+      syncWithGitHub(false);
+      startAutoSync();
+    }
   } else {
     setSyncState('local', 'Modo Local');
   }

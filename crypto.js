@@ -14,10 +14,20 @@ function hexToBuf(hexString) {
   return bytes.buffer;
 }
 
+function checkCryptoSupport() {
+  if (!window.crypto || !window.crypto.subtle) {
+    if (window.location.protocol === 'http:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      throw new Error('REQUIRE_HTTPS: Los navegadores bloquean el cifrado en páginas sin HTTPS. Accede usando el enlace con candado seguro (https://).');
+    }
+    throw new Error('NO_CRYPTO: Tu navegador no tiene habilitada la API de cifrado Web Crypto.');
+  }
+}
+
 /**
  * Deriva una clave criptográfica AES-GCM de 256 bits a partir de una contraseña/PIN usando PBKDF2
  */
 async function deriveKey(pin, salt) {
+  checkCryptoSupport();
   const enc = new TextEncoder();
   const keyMaterial = await window.crypto.subtle.importKey(
     'raw',
@@ -57,6 +67,7 @@ export async function encryptData(data, pin) {
     };
   }
 
+  checkCryptoSupport();
   const salt = window.crypto.getRandomValues(new Uint8Array(16));
   const iv = window.crypto.getRandomValues(new Uint8Array(12));
   const key = await deriveKey(pin.trim(), salt);
@@ -99,6 +110,8 @@ export async function decryptData(payload, pin) {
   if (!pin || pin.trim() === '') {
     throw new Error('MISSING_PIN: Los datos están cifrados y se requiere el PIN familiar.');
   }
+
+  checkCryptoSupport();
 
   try {
     const salt = hexToBuf(payload.salt);

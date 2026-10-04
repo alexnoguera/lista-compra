@@ -138,6 +138,16 @@ body {
   background: var(--bg-input);
   color: var(--text-muted);
   white-space: nowrap;
+  cursor: pointer;
+  transition: transform 0.1s ease, background 0.15s ease;
+}
+
+.sync-status:hover {
+  background: var(--border-color);
+}
+
+.sync-status:active {
+  transform: scale(0.96);
 }
 
 .status-dot {
